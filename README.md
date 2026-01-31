@@ -11,32 +11,59 @@ Built for the [Clawdbot](https://github.com/clawdbot/clawdbot) and OpenClaw ecos
 
 ---
 
-## Quick Start
+## Getting Started
 
-Get ClawWatch running in under 2 minutes:
+Get ClawWatch monitoring your AI agents in 5 simple steps:
+
+### 1. Clone and Configure
 
 ```bash
 # Clone the repository
 git clone https://github.com/0xdsqr/clawwatch.git
 cd clawwatch
 
-# Configure your setup
+# Copy the configuration template
 cp .env.example .env
-# Edit .env with your gateway URL and token
+```
 
-# Start everything with Docker
+### 2. Edit Configuration
+
+Open `.env` in your editor and set these **required** values:
+
+```bash
+# Your Clawdbot gateway URL and token
+GATEWAY_URL=http://127.0.0.1:18789
+GATEWAY_TOKEN=your_gateway_token_here
+```
+
+> 💡 **Where to find these**: Check your Clawdbot gateway config or startup logs
+
+### 3. Start ClawWatch
+
+```bash
+# Start all services with Docker
 docker compose up -d
+```
 
-# Generate admin key for schema deployment
+Wait ~30 seconds for services to start, then:
+
+### 4. Set Up Database
+
+```bash
+# Generate admin key
 docker compose exec convex-backend ./generate_admin_key.sh
 
-# Deploy the database schema
+# Deploy the schema (use the key from above)
 npx convex dev --once --url http://127.0.0.1:3210 --admin-key <your-admin-key>
 ```
 
-Visit:
-- **ClawWatch Dashboard**: http://localhost:5173
-- **Convex Admin**: http://localhost:6791
+### 5. Open Dashboard
+
+Visit in your browser:
+- **🔍 ClawWatch Dashboard**: http://localhost:5173
+- **⚙️ Convex Admin** (optional): http://localhost:6791
+
+**That's it!** ClawWatch will start collecting data from your gateway automatically.
 
 ---
 
