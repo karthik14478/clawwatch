@@ -1187,7 +1187,7 @@ function AgentDetailPage() {
               </CardContent>
             </Card>
           ) : xray ? (
-            <AgentXray data={xray} />
+            <AgentXray data={xray} agentId={agentId} />
           ) : (
             <Card className="border-border/50">
               <CardContent className="py-12 text-center text-sm text-muted-foreground">

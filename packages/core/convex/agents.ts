@@ -495,3 +495,392 @@ export const xraySummary = query({
     };
   },
 });
+
+// ─── X-Ray Drill-down ───
+// Returns detailed data for a specific node in the X-Ray graph.
+
+export const xrayDrilldown = query({
+  args: {
+    agentId: v.id("agents"),
+    nodeType: v.string(), // "ai" | "service" | "channel" | "memory" | "internal" | "core"
+    nodeId: v.string(), // "Anthropic", "GitHub", "discord", "Memory", "core-tools", etc.
+  },
+  handler: async (ctx, args) => {
+    const agent = await ctx.db.get(args.agentId);
+    if (!agent) return null;
+
+    // ═══ AI Provider drill-down ═══
+    if (args.nodeType === "ai") {
+      const weekAgo = Date.now() - 7 * 24 * 60 * 60 * 1000;
+      const costRecords = await ctx.db
+        .query("costRecords")
+        .withIndex("by_agent_time", (q) =>
+          q.eq("agentId", args.agentId).gte("timestamp", weekAgo),
+        )
+        .order("desc")
+        .take(1000);
+
+      // Filter by provider name
+      const providerRecords = costRecords.filter((r) => {
+        const { name } = normalizeProvider(r.provider);
+        return name === args.nodeId;
+      });
+
+      // Model breakdown
+      const modelMap = new Map<
+        string,
+        {
+          cost: number;
+          inputTokens: number;
+          outputTokens: number;
+          requests: number;
+          lastSeen: number;
+        }
+      >();
+      for (const r of providerRecords) {
+        const existing = modelMap.get(r.model) ?? {
+          cost: 0,
+          inputTokens: 0,
+          outputTokens: 0,
+          requests: 0,
+          lastSeen: 0,
+        };
+        existing.cost += r.cost;
+        existing.inputTokens += r.inputTokens;
+        existing.outputTokens += r.outputTokens;
+        existing.requests += 1;
+        existing.lastSeen = Math.max(existing.lastSeen, r.timestamp);
+        modelMap.set(r.model, existing);
+      }
+
+      const models = Array.from(modelMap.entries())
+        .map(([model, data]) => ({
+          model,
+          cost: Math.round(data.cost * 10000) / 10000,
+          inputTokens: data.inputTokens,
+          outputTokens: data.outputTokens,
+          requests: data.requests,
+          lastSeen: data.lastSeen,
+        }))
+        .sort((a, b) => b.cost - a.cost);
+
+      // Recent records (last 20)
+      const recentRecords = providerRecords.slice(0, 20).map((r) => ({
+        timestamp: r.timestamp,
+        model: r.model,
+        inputTokens: r.inputTokens,
+        outputTokens: r.outputTokens,
+        cost: Math.round(r.cost * 10000) / 10000,
+        sessionKey: r.sessionKey ?? null,
+      }));
+
+      // Totals
+      let totalCost = 0;
+      let totalInput = 0;
+      let totalOutput = 0;
+      for (const r of providerRecords) {
+        totalCost += r.cost;
+        totalInput += r.inputTokens;
+        totalOutput += r.outputTokens;
+      }
+
+      return {
+        type: "ai" as const,
+        provider: args.nodeId,
+        totalCost: Math.round(totalCost * 10000) / 10000,
+        totalInputTokens: totalInput,
+        totalOutputTokens: totalOutput,
+        totalRequests: providerRecords.length,
+        models,
+        recentRecords,
+      };
+    }
+
+    // ═══ Service drill-down ═══
+    if (args.nodeType === "service") {
+      const activities = await ctx.db
+        .query("activities")
+        .withIndex("by_agent", (q) => q.eq("agentId", args.agentId))
+        .order("desc")
+        .take(500);
+
+      const matchingActivities = activities.filter((a) => {
+        if (a.type !== "tool_call") return false;
+        const toolName = extractToolName(a.summary);
+        if (!toolName) return false;
+        const classification = classifyToolCall(toolName, a.summary);
+        if (classification === "core" || classification === null) return false;
+        return classification.name === args.nodeId;
+      });
+
+      const recentActivities = matchingActivities.slice(0, 20).map((a) => ({
+        timestamp: a.timestamp ?? a._creationTime,
+        summary: a.summary,
+        sessionKey: a.sessionKey ?? null,
+        channel: a.channel ?? null,
+      }));
+
+      return {
+        type: "service" as const,
+        service: args.nodeId,
+        totalCalls: matchingActivities.length,
+        recentActivities,
+      };
+    }
+
+    // ═══ Channel drill-down ═══
+    if (args.nodeType === "channel") {
+      const sessions = await ctx.db
+        .query("sessions")
+        .withIndex("by_agent", (q) => q.eq("agentId", args.agentId))
+        .order("desc")
+        .take(200);
+
+      // Filter sessions by channel
+      const channelSessions = sessions.filter((s) => {
+        if (!s.channel) return false;
+        const channels = s.channel.split(",").map((c) => c.trim());
+        return channels.includes(args.nodeId);
+      });
+
+      const sessionList = channelSessions.slice(0, 20).map((s) => ({
+        sessionKey: s.sessionKey,
+        kind: s.kind,
+        lastActivity: s.lastActivity,
+        totalTokens: s.totalTokens,
+        estimatedCost: Math.round(s.estimatedCost * 10000) / 10000,
+        messageCount: s.messageCount,
+        isActive: s.isActive,
+        startedAt: s.startedAt,
+      }));
+
+      // Also get messaging activities for this channel
+      const activities = await ctx.db
+        .query("activities")
+        .withIndex("by_agent", (q) => q.eq("agentId", args.agentId))
+        .order("desc")
+        .take(300);
+
+      const channelActivities = activities
+        .filter((a) => {
+          if (a.type !== "tool_call") return false;
+          const toolName = extractToolName(a.summary);
+          if (toolName !== "message") return false;
+          // Check if activity is related to this channel
+          return (
+            a.channel === args.nodeId ||
+            a.summary.toLowerCase().includes(args.nodeId.toLowerCase())
+          );
+        })
+        .slice(0, 20)
+        .map((a) => ({
+          timestamp: a.timestamp ?? a._creationTime,
+          summary: a.summary,
+          sessionKey: a.sessionKey ?? null,
+        }));
+
+      return {
+        type: "channel" as const,
+        channel: args.nodeId,
+        totalSessions: channelSessions.length,
+        sessions: sessionList,
+        recentActivity: channelActivities,
+      };
+    }
+
+    // ═══ Memory drill-down ═══
+    if (args.nodeType === "memory") {
+      const activities = await ctx.db
+        .query("activities")
+        .withIndex("by_agent", (q) => q.eq("agentId", args.agentId))
+        .order("desc")
+        .take(500);
+
+      const memoryActivities = activities.filter((a) => {
+        if (a.type !== "tool_call") return false;
+        const toolName = extractToolName(a.summary);
+        return toolName === "memory_search" || toolName === "memory_get";
+      });
+
+      const recentCalls = memoryActivities.slice(0, 20).map((a) => ({
+        timestamp: a.timestamp ?? a._creationTime,
+        summary: a.summary,
+        sessionKey: a.sessionKey ?? null,
+        tool: extractToolName(a.summary) ?? "unknown",
+      }));
+
+      // Extract file paths from summaries
+      const filePaths = new Set<string>();
+      for (const a of memoryActivities) {
+        // Common patterns: "memory_get: /path/to/file" or mentions of file paths
+        const pathMatches = a.summary.match(/(?:\/[\w.-]+)+/g);
+        if (pathMatches) {
+          for (const p of pathMatches) filePaths.add(p);
+        }
+      }
+
+      return {
+        type: "memory" as const,
+        totalCalls: memoryActivities.length,
+        recentCalls,
+        filesAccessed: Array.from(filePaths).slice(0, 30),
+      };
+    }
+
+    // ═══ Internal (Sub-Agents, Cron) drill-down ═══
+    if (args.nodeType === "internal") {
+      const activities = await ctx.db
+        .query("activities")
+        .withIndex("by_agent", (q) => q.eq("agentId", args.agentId))
+        .order("desc")
+        .take(500);
+
+      // Sub-agents
+      if (
+        args.nodeId === "Sub-Agents" ||
+        args.nodeId.startsWith("subagent-")
+      ) {
+        const subAgentActivities = activities.filter((a) => {
+          if (a.type !== "tool_call") return false;
+          const toolName = extractToolName(a.summary);
+          return toolName === "sessions_spawn" || toolName === "sessions_send";
+        });
+
+        // Get sub-agent sessions
+        const sessions = await ctx.db
+          .query("sessions")
+          .withIndex("by_agent", (q) => q.eq("agentId", args.agentId))
+          .order("desc")
+          .take(200);
+
+        const subAgentSessions = sessions
+          .filter((s) => s.kind === "subagent")
+          .slice(0, 20)
+          .map((s) => ({
+            sessionKey: s.sessionKey,
+            displayName: s.displayName ?? null,
+            lastActivity: s.lastActivity,
+            totalTokens: s.totalTokens,
+            estimatedCost: Math.round(s.estimatedCost * 10000) / 10000,
+            isActive: s.isActive,
+            startedAt: s.startedAt,
+            messageCount: s.messageCount,
+          }));
+
+        const recentSpawns = subAgentActivities.slice(0, 20).map((a) => ({
+          timestamp: a.timestamp ?? a._creationTime,
+          summary: a.summary,
+          sessionKey: a.sessionKey ?? null,
+        }));
+
+        return {
+          type: "internal" as const,
+          subType: "subagents" as const,
+          totalSpawns: subAgentActivities.filter(
+            (a) => extractToolName(a.summary) === "sessions_spawn",
+          ).length,
+          sessions: subAgentSessions,
+          recentActivity: recentSpawns,
+        };
+      }
+
+      // Cron/Scheduler
+      if (args.nodeId === "Cron/Scheduler") {
+        const cronActivities = activities.filter((a) => {
+          if (a.type !== "tool_call") return false;
+          const toolName = extractToolName(a.summary);
+          return toolName === "cron";
+        });
+
+        const recentCalls = cronActivities.slice(0, 20).map((a) => ({
+          timestamp: a.timestamp ?? a._creationTime,
+          summary: a.summary,
+          sessionKey: a.sessionKey ?? null,
+        }));
+
+        return {
+          type: "internal" as const,
+          subType: "cron" as const,
+          totalCalls: cronActivities.length,
+          recentActivity: recentCalls,
+        };
+      }
+
+      // Generic internal (Messaging, etc.)
+      const matchingActivities = activities.filter((a) => {
+        if (a.type !== "tool_call") return false;
+        const toolName = extractToolName(a.summary);
+        if (!toolName) return false;
+        const classification = classifyToolCall(toolName, a.summary);
+        if (classification === "core" || classification === null) return false;
+        return classification.name === args.nodeId;
+      });
+
+      return {
+        type: "internal" as const,
+        subType: "generic" as const,
+        name: args.nodeId,
+        totalCalls: matchingActivities.length,
+        recentActivity: matchingActivities.slice(0, 20).map((a) => ({
+          timestamp: a.timestamp ?? a._creationTime,
+          summary: a.summary,
+          sessionKey: a.sessionKey ?? null,
+        })),
+      };
+    }
+
+    // ═══ Core Tools drill-down ═══
+    if (args.nodeType === "core") {
+      const activities = await ctx.db
+        .query("activities")
+        .withIndex("by_agent", (q) => q.eq("agentId", args.agentId))
+        .order("desc")
+        .take(500);
+
+      const coreToolActivities = activities.filter((a) => {
+        if (a.type !== "tool_call") return false;
+        const toolName = extractToolName(a.summary);
+        return toolName !== null && CORE_TOOLS.has(toolName);
+      });
+
+      // Breakdown by tool
+      const toolBreakdown = new Map<
+        string,
+        Array<{ timestamp: number; summary: string; sessionKey: string | null }>
+      >();
+      const toolCounts: Record<string, number> = {};
+
+      for (const a of coreToolActivities) {
+        const toolName = extractToolName(a.summary);
+        if (!toolName) continue;
+        toolCounts[toolName] = (toolCounts[toolName] ?? 0) + 1;
+
+        const entries = toolBreakdown.get(toolName) ?? [];
+        if (entries.length < 10) {
+          entries.push({
+            timestamp: a.timestamp ?? a._creationTime,
+            summary: a.summary,
+            sessionKey: a.sessionKey ?? null,
+          });
+        }
+        toolBreakdown.set(toolName, entries);
+      }
+
+      const tools = Array.from(toolBreakdown.entries()).map(
+        ([tool, recent]) => ({
+          tool,
+          count: toolCounts[tool] ?? 0,
+          recentCalls: recent,
+        }),
+      );
+
+      return {
+        type: "core" as const,
+        totalCalls: coreToolActivities.length,
+        tools,
+      };
+    }
+
+    return null;
+  },
+});
