@@ -25,6 +25,7 @@ ClawWatch is a local-first monitoring system for agentic AI agents. Connect your
 
 - 💸 **Real-time cost tracking** - Monitor spend across providers and models as it happens
 - 🤖 **Multi-agent dashboard** - Unified view of all connected agents with live status and session breakdowns
+- 🔬 **Agent X-Ray** - Interactive topology graph showing every integration — AI providers, external services, channels, memory, and cron jobs. Click any node to drill down into traces, sessions, cost breakdowns, and call history.
 - 🔔 **Smart alerting** - Rules for budget thresholds, offline detection, and anomalies
 - 📡 **Live event stream** - Filterable log of agent activity
 - 📊 **Token analytics** - Input/output/cache breakdowns with model comparisons
@@ -145,7 +146,7 @@ bun run format
 
 **Stack**
 
-- **Frontend**: React 19, TanStack Router, Tailwind CSS 4, Recharts
+- **Frontend**: React 19, TanStack Router, Tailwind CSS 4, Recharts, React Flow
 - **Backend**: Convex (real-time database + API)
 - **Runtime**: Bun
 - **Collector**: WebSocket + polling for live data ingestion
