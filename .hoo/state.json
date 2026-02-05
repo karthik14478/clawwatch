@@ -1,0 +1,15 @@
+{
+  "version": "1.0",
+  "hooId": "a40ca8a4-3aec-4acd-a3ce-9c9f8c7f99fa",
+  "lastSyncAt": "2026-02-05T05:49:02.658Z",
+  "events": {
+    "file": ".hoo/events.jsonl",
+    "lastSyncedEventId": "ml9194lr-6l9g1ks5"
+  },
+  "stamp": {
+    "targets": {
+      "infra-collector": "0.1.1",
+      "infra": "0.1.1"
+    }
+  }
+}
