@@ -7,12 +7,7 @@
     flake-compat.flake = false;
   };
 
-  outputs =
-    {
-      self,
-      nixpkgs,
-      ...
-    }:
+  outputs = { self, nixpkgs, ... }:
     let
       systems = [
         "x86_64-linux"
@@ -94,6 +89,28 @@
           lint = pkgs.runCommand "oxlint-check" { src = self; buildInputs = [ pkgs.oxlint ]; } ''
             cd $src
             oxlint .
+            mkdir -p $out
+          '';
+
+          nixfmt = pkgs.runCommand "nixfmt-check" {
+            src = self;
+            buildInputs = [ pkgs.nixfmt-rfc-style pkgs.findutils ];
+          } ''
+            cd $src
+            files=$(find . -name "*.nix" -type f)
+            if [ -n "$files" ]; then
+              nixfmt --check $files
+            fi
+            mkdir -p $out
+          '';
+
+          tests = pkgs.runCommand "tests" { src = self; } ''
+            echo "No test suite configured yet"
+            mkdir -p $out
+          '';
+
+          build = pkgs.runCommand "build" { src = self; } ''
+            echo "No build derivation configured yet"
             mkdir -p $out
           '';
         }
